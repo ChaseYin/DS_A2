@@ -1,13 +1,3 @@
-/******************************************************************************
- * A factory class that is used to create JSON formatted messages, to be sent
- * as replies back to the clients over the TCP connection.
- *
- * E.g JSONObject ServerMessage
- * = new ServerMessage.newIdentityMsg(String former, String newIdentity)
- *
- * @author Rem, 2015
- ******************************************************************************/
-
 package Server;
 
 import org.json.simple.JSONArray;

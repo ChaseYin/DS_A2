@@ -6,6 +6,7 @@ import org.json.simple.JSONObject;
 import org.json.simple.JSONValue;
 
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.Serializable;
 import java.net.InetAddress;
@@ -13,6 +14,7 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Scanner;
 
+import static Server.Server.networkList;
 import static java.lang.Integer.parseInt;
 //import static jdk.internal.logger.DefaultLoggerFinder.SharedLoggers.system;
 
@@ -54,8 +56,15 @@ public class peerListenThread implements Runnable {
             String message;
             System.out.println("成功启动本地监听线程");
 
+
             String ipAddress = InetAddress.getLocalHost().toString();
-            System.out.println("address1是："+ipAddress);
+            String[] arr = ipAddress.split("/");
+            System.out.println("第一个参数是："+arr[0]);
+            System.out.println("第二个参数是："+arr[1]);
+
+            String ip = arr[1];
+
+            System.out.println("address1是："+ip);
             // Send new identity message for the first time
 //            String newIdReq = new peerMessage().newIdentityRequest("");
 //            outputStream.writeUTF(newIdReq);
@@ -100,6 +109,7 @@ public class peerListenThread implements Runnable {
                             String listRequestMsg = new peerMessage().listRequest();
                             ArrayList<JSONObject> roomsCount = Server.getRoomListWithCount();
                             System.out.println("当前peer下的所有room为："+roomsCount);
+                            System.out.println("执行本地#list命令");
 //                            outputStream.writeUTF(listRequestMsg);
 //                            outputStream.flush();
                             break;
@@ -113,7 +123,95 @@ public class peerListenThread implements Runnable {
                             }
                             break;
 
+                        case "#searchNetwork":
+                            //users里存连接当前peer的peer
+                            try {
+                                String[] users = networkList.toArray(new String[networkList.size()]);
 
+
+//                                System.out.println("当前连接本peer的用户有：");
+//                                for (int i = 0; i < users.length; i++) {
+//                                    System.out.println(" " + users[i] + " ; ");
+//                                }
+
+                                while(!networkList.isEmpty()){
+                                    try {
+                                        int size = networkList.size();
+                                        String element = networkList.poll();
+                                        String[] portArr = element.split(":");
+                                        //System.out.println("需要连接的ip是"+portArr[0]);
+                                        //System.out.println("端口号是"+portArr[1]);
+
+                                        System.out.println("现在有"+size+"个peer需要去search");
+                                        //System.out.println("执行第"+num+"次search");
+
+                                        Socket connSocket = null;
+                                        connSocket = new Socket(portArr[0], Integer.parseInt(portArr[1]));
+
+                                        DataInputStream ins = new DataInputStream(connSocket.getInputStream());
+
+                                        Thread searchThread = new Thread(new searchNetworkThread(connSocket));
+                                        searchThread.start();
+                                        System.out.println("当前peer为："+element);
+
+                                        //这里从3改成了2，因为好像并没有case："quit"的时候
+                                        for(int n = 0; n < 2;n++){
+                                            String response = ins.readUTF();
+
+                                            //utilize json object
+                                            Object obj = JSONValue.parse(response);
+                                            JSONObject jsonMsg = (JSONObject) obj;
+                                            String type = (String) jsonMsg.get("type");
+
+                                            switch (type) {
+                                                case "neighborlist":
+                                                    //neighborContentsReply(jsonMsg);
+                                                    storeNeighbor(jsonMsg);
+                                                    break;
+
+                                                //说明当前连接的peer都有哪些room
+                                                case "roomlist":
+                                                    roomListReply(jsonMsg);
+                                                    break;
+
+//                                                case "quit":
+//                                                    roomListReply(jsonMsg);
+//                                                    break;
+
+                                                default:
+                                                    System.out.println("default情况触发");
+                                                    break;
+                                            }
+                                        }
+                                    }catch(EOFException e){
+                                        System.out.println("当前线程quit完毕");
+                                    }
+                                }
+
+
+                            }catch(EOFException e){
+                                    System.out.println("DataInputStream关闭");
+                            }
+
+                                break;
+
+
+                        case "#join":
+                            try {
+                                String roomId = messageTokens[1];
+                                if (roomId != null && isValidRoomName(roomId)) {
+//                                    String joinRoomMsg = new peerMessage().joinRoomRequest(roomId);
+//                                    outputStream.writeUTF(joinRoomMsg);
+//                                    outputStream.flush();
+                                    Server.localJoinRoom(roomId);
+                                } else {
+                                    System.out.println("Invalid room name.");
+                                }
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                System.out.println("Please provide the name of the room you would like to join.");
+                            }
+                            break;
 
                         case "#connect":
                             try {
@@ -135,7 +233,7 @@ public class peerListenThread implements Runnable {
                                     connectSocket = new Socket(connectAddress, parseInt(connectPort));
                                     DataInputStream in = new DataInputStream(connectSocket.getInputStream());
 
-                                    Thread sendingThread = new Thread(new peerSendThread(connectSocket,ipAddress,parseInt(conPort),listenPort));
+                                    Thread sendingThread = new Thread(new peerSendThread(connectSocket,ip,parseInt(conPort),listenPort));
                                     sendingThread.start();
                                     connected = true;
 
@@ -261,6 +359,10 @@ public class peerListenThread implements Runnable {
 
 
                             break;
+
+
+
+
 
 
                         //目前主要修改这个命令
@@ -422,6 +524,34 @@ public class peerListenThread implements Runnable {
 
 
     }
+
+    private static void storeNeighbor(JSONObject jsonMsg) {
+
+//        String currentRoom = jsonMsg.get("roomid").toString();
+        //get all identities of the room
+        JSONArray jsonRoomMembers = (JSONArray) jsonMsg.get("neighbors");
+
+        ArrayList<String> roomMembers = new ArrayList<>();
+
+        for (int i = 0; i < jsonRoomMembers.size(); i++) {
+            //use msg from server to add user into rooms
+            roomMembers.add(jsonRoomMembers.get(i).toString());
+
+            networkList.add(jsonRoomMembers.get(i).toString());
+        }
+
+
+//        System.out.print("neighbor contains ");
+//
+//        for (String member : roomMembers) {
+//            System.out.print(member + "; ");
+//        }
+//        System.out.println();
+
+
+
+    }
+
 
     private static void roomListReply(JSONObject jsonMsg) {
         JSONArray roomList = (JSONArray) jsonMsg.get("rooms");

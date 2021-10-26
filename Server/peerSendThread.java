@@ -29,12 +29,21 @@ public class peerSendThread implements Runnable {
 
     }
 
+
+
+    public void test(){
+
+        System.out.println("");
+
+    }
     @Override
     public void run() {
 
         try {
-            //get outputStream
+
             DataOutputStream outputStream = new DataOutputStream(socket.getOutputStream());
+            //get outputStream
+//            DataOutputStream outputStream = new DataOutputStream(socket.getOutputStream());
             // read users' input
             //读取用户的输入（命令行的输入）
             //System.out.print("[]"+ipAddress+": "+connectPort+">");
@@ -46,9 +55,16 @@ public class peerSendThread implements Runnable {
 //            System.out.println("address1是："+ipAddress);
 
             //发送当前peer的连接id（作为聊天室的发言id）以及监听地址和端口（供别的peer查看并连接）
-            String newHostChangeReq = new peerMessage().newHostChangeRequest(id, listenPort);
+
+            //把原来的listenPort改成了listenId
+//            String newHostChangeReq = new peerMessage().newHostChangeRequest(id, listenPort);
+            String newHostChangeReq = new peerMessage().newHostChangeRequest(id, listenId);
             outputStream.writeUTF(newHostChangeReq);
             outputStream.flush();
+
+//            String searchNeighborsRequestMsg = new peerMessage().listNeighborsRequest();
+//            outputStream.writeUTF(searchNeighborsRequestMsg);
+//            outputStream.flush();
 
 
             // Send new identity message for the first time
@@ -86,11 +102,6 @@ public class peerSendThread implements Runnable {
                     String command = messageTokens[0];
 
                     switch (command) {
-
-
-
-
-
 
                         //不再需要这个case
 //                        case "#identitychange":
@@ -143,6 +154,7 @@ public class peerSendThread implements Runnable {
                             String listRequestMsg = new peerMessage().listRequest();
                             outputStream.writeUTF(listRequestMsg);
                             outputStream.flush();
+                            System.out.println("执行远程#list命令");
                             break;
 
                         case "#listneighbors":
@@ -241,5 +253,12 @@ public class peerSendThread implements Runnable {
             return false;
         }
     }
+
+    public DataOutputStream getOutput() throws IOException {
+
+        return new DataOutputStream(socket.getOutputStream());
+
+    }
+
 
 }

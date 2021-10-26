@@ -47,12 +47,19 @@ public class ChatRoom {
     }
 
     public void removeUser(String userId) {
-        identities.remove(identities.indexOf(userId));
-        for (int i = 0; i < clientThreads.size(); i++) {
-            if (clientThreads.get(i).getIdentity().equals(userId)) {
-                clientThreads.remove(i);
+        if(identities.size()==0)
+        {
+            System.out.println("当前room还没有人");
+        }
+        else{
+            identities.remove(identities.indexOf(userId));
+            for (int i = 0; i < clientThreads.size(); i++) {
+                if (clientThreads.get(i).getIdentity().equals(userId)) {
+                    clientThreads.remove(i);
+                }
             }
         }
+
     }
 
     public void broadcastToRoom(String message) throws IOException {
@@ -60,6 +67,7 @@ public class ChatRoom {
         for (ClientConnection clientConnect : clientThreads) {
             //broadcast message to room
             Thread send = new Thread(new ServerSendThread(clientConnect.getOutput(), message));
+
             send.start();
         }
     }

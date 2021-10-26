@@ -12,15 +12,15 @@ import javax.swing.*;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketException;
+import java.net.*;
 import java.util.ArrayList;
 import java.util.PriorityQueue;
 import java.util.Scanner;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
+
+import static java.net.InetAddress.getLocalHost;
 
 public class Server{
 
@@ -31,13 +31,23 @@ public class Server{
     @Option(required = false, name = "-h", aliases = {"--host"}, usage = "Host Address")
     private static String host;
 
+    //建立一个currentRoom
+    protected static ChatRoom currentRoom;
 
     // count connected users
     protected static Integer guestCount = 0;
+
     protected static PriorityQueue<Integer> nextLowestQueue = new PriorityQueue<>();
 
     // Connected user info    (  Uses Thread-Safe Variant of ArrayList   )
     protected static CopyOnWriteArrayList<String> userIdentities = new CopyOnWriteArrayList();
+
+    //如果报"不安全的操作，则是这里"
+
+    protected static ConcurrentLinkedQueue<String> networkList = new ConcurrentLinkedQueue<String>();
+
+    //protected static CopyOnWriteArrayList<String> networkList = new CopyOnWriteArrayList();
+
     protected static CopyOnWriteArrayList<String> userKicked = new CopyOnWriteArrayList();
 
     protected static CopyOnWriteArrayList<ClientConnection> userThreads = new CopyOnWriteArrayList<>();
@@ -48,12 +58,20 @@ public class Server{
     //private static int connect = 9999;//连接端口
     private static String identity;
 
+
     public static void main(String[] args) throws IOException, InterruptedException {
         new Server().doMain(args);
 //        System.out.println("port2 是:"+connect);
 
-        String ipAddress = InetAddress.getLocalHost().toString();
-        System.out.println("address1是："+ipAddress);
+        String ipAddress = getLocalHost().toString();
+        //System.out.println("address1是："+ipAddress);
+        String[] arr = ipAddress.split("/");
+        System.out.println("第一个参数是："+arr[0]);
+        System.out.println("第二个参数是："+arr[1]);
+        String ip = arr[1];
+
+        identity = ip+" listen: "+port;
+        System.out.println("当前peer的id为："+ip);
 
 
 //        String serverIP = getServerIp();
@@ -67,11 +85,16 @@ public class Server{
             //首先给peer分配一个端口去监听请求（-p 3000 or -p xxxx）
             //此peer在port端口号监听
             serverSocket = new ServerSocket(port);
+
+
+
 //            System.out.println("Server is listening on port " + port + "...");
             System.out.println("This peer is currently listening on port " + port + "...");
 
-            Thread listeningThread = new Thread(new peerListenThread(ipAddress,port));
+            Thread listeningThread = new Thread(new peerListenThread(ip,port));
             listeningThread.start();
+
+            //DataOutputStream out = listeningThread.getOutput();
 
 
             //init the mainHall
@@ -84,6 +107,9 @@ public class Server{
                 //如果有别的peer连接此peer的时候
                 Socket socket = serverSocket.accept();//accept the requests
                 System.out.println("New peer Connected...");
+
+                SocketAddress clientPort=socket.getRemoteSocketAddress();
+                System.out.println("连接的peer的连接id是："+clientPort);
 
                 int guestId = getNextAvailableId();
 
@@ -124,7 +150,7 @@ public class Server{
     private static String getServerIp() {
         try {
             //用 getLocalHost() 方法创建的InetAddress的对象
-            InetAddress address = InetAddress.getLocalHost();
+            InetAddress address = getLocalHost();
 
             return address.getHostAddress();
         } catch (Exception e) {
@@ -164,6 +190,8 @@ public class Server{
 
     public static void announce(String message) throws IOException {
         for (ClientConnection connection : userThreads) {
+
+
             DataOutputStream out = connection.getOutput();
 
             Thread messageSender = new Thread(new ServerSendThread(out, message));
@@ -371,5 +399,69 @@ public class Server{
         }
 
     }
+
+    //后面需要写一下这个函数
+    private boolean isAlreadyInRoom(String identity, String roomId) {
+        ChatRoom room = Server.getRoom(roomId);
+        if (room != null) {
+            for (String user : room.getUsers()) {
+                if (user.equals(identity)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static void localJoinRoom(String roomId) throws IOException {
+
+        System.out.println("我叫："+identity);
+        //ChatRoom MainHall = Server.rooms.get(0);
+        //currentRoom = MainHall;
+
+        ChatRoom roomJoin = Server.getRoom(roomId);
+
+        try {
+            if (roomJoin != null) {
+
+                //第一次加入room
+                if (currentRoom == null) {
+                    String roomChangeMessage = new ServerMessage().roomChangeMsg(identity, "", roomId);
+                    roomJoin.broadcastToRoom(roomChangeMessage);
+                    currentRoom = roomJoin;
+                    currentRoom.getUsers().add(identity);
+                } else {
+                    String roomChangeMessage = new ServerMessage().roomChangeMsg(identity, currentRoom.getRoomId(), roomId);
+                    // Broadcast changes to rooms
+                    //String roomChangeMessage = new ServerMessage().roomChangeMsg(identity, currentRoom.getRoomId(), roomId);
+
+                    currentRoom.broadcastToRoom(roomChangeMessage);
+                    roomJoin.broadcastToRoom(roomChangeMessage);
+
+                    // Remove from current room
+                    currentRoom.removeUser(identity);
+
+                    // Delete previous room if they are the owner and no one is in it
+                    //deleteRoomIfOwner(identity, currentRoom);
+
+                    // Put user in the new room
+                    currentRoom = roomJoin;
+
+                    // Record them as now being in the new room
+                    currentRoom.getUsers().add(identity);
+                }
+
+
+            } else {
+
+                System.out.println("要加入的room为null！");
+
+            }
+        }catch(NullPointerException e){
+            System.out.println("用户第一次加入room");
+        }
+    }
+
+
 
 }

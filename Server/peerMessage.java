@@ -7,7 +7,7 @@ public class peerMessage {
 
     JSONObject jsonMessage;
 
-    public String newHostChangeRequest(String identity, int listenPort) {
+    public String newHostChangeRequest(String identity, String listenId) {
         //newId message
         jsonMessage = new JSONObject();
         jsonMessage.put("type", "hostchange");
@@ -16,7 +16,7 @@ public class peerMessage {
 
         //peer所监听的地址包括端口号
         //别的peer可以通过此信息连接到该peer
-        jsonMessage.put("listenIdentity", listenPort);
+        jsonMessage.put("listenIdentity", listenId);
 
         String jsonString = jsonMessage.toJSONString() + "\n";
         return jsonString;

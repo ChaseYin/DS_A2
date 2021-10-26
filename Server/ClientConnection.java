@@ -18,6 +18,8 @@ public class ClientConnection extends Thread {
 
     String identity;
     String listenPort;//
+    String listenIdentity;
+
 
     protected Socket socket;
     protected ConcurrentLinkedQueue<String> messageQueue = new ConcurrentLinkedQueue<String>();
@@ -48,7 +50,7 @@ public class ClientConnection extends Thread {
 
     public String getListenIdentity() {
 
-        return listenPort;
+        return listenIdentity;
 
     }
 
@@ -241,15 +243,26 @@ public class ClientConnection extends Thread {
         return roomsWithCount;
     }
 
-    private void getNeighbors() throws IOException {
+    private void getNeighbors(){
 
-            String[] users = Server.userIdentities.toArray(new String[Server.userIdentities.size()]);
+        try {
+            //现在把userIdentities替换成networkList试一下
+            //String[] users = Server.userIdentities.toArray(new String[Server.userIdentities.size()]);
+            String[] users = Server.networkList.toArray(new String[Server.networkList.size()]);
 
-            System.out.println("获得的已连接用户是："+users[0]);
-            String whoMainHallResponse = new ServerMessage().neighborMsg( users);
-            getOutput().writeUTF(whoMainHallResponse);
-            getOutput().flush();
+            if(users.length==0)
+            {
+                System.out.println("现在此peer还没有neighbor");
+            }else{
+                //System.out.println("获得的已连接用户是：" + users[0]);
+                String whoMainHallResponse = new ServerMessage().neighborMsg(users);
+                getOutput().writeUTF(whoMainHallResponse);
+                getOutput().flush();
+            }
 
+        }catch(IOException e){
+            e.printStackTrace();
+        }
 
     }
 
@@ -365,24 +378,47 @@ public class ClientConnection extends Thread {
 
         if (room != null) {
 
-            // Broadcast changes to rooms
-            String roomChangeMessage = new ServerMessage().roomChangeMsg(identity, currentRoom.getRoomId(), roomId);
+            if(currentRoom == null){
+                // Broadcast changes to rooms
+                String roomChangeMessage = new ServerMessage().roomChangeMsg(identity, "", roomId);
 
-            currentRoom.broadcastToRoom(roomChangeMessage);
-            room.broadcastToRoom(roomChangeMessage);
+                //currentRoom.broadcastToRoom(roomChangeMessage);
+                room.broadcastToRoom(roomChangeMessage);
 
-            // Remove from current room
-            currentRoom.removeUser(identity);
+                // Remove from current room
+                //currentRoom.removeUser(identity);
 
-            // Delete previous room if they are the owner and no one is in it
-            deleteRoomIfOwner(identity, currentRoom);
+                // Delete previous room if they are the owner and no one is in it
+                //deleteRoomIfOwner(identity, currentRoom);
 
-            // Put user in the new room
-            currentRoom = room;
+                // Put user in the new room
+                currentRoom = room;
 
-            // Record them as now being in the new room
-            currentRoom.getUsers().add(identity);
-            currentRoom.getClientThreads().add(ClientConnection.this);
+                // Record them as now being in the new room
+                currentRoom.getUsers().add(identity);
+                currentRoom.getClientThreads().add(ClientConnection.this);
+            }else{
+                // Broadcast changes to rooms
+                String roomChangeMessage = new ServerMessage().roomChangeMsg(identity, currentRoom.getRoomId(), roomId);
+
+                currentRoom.broadcastToRoom(roomChangeMessage);
+                room.broadcastToRoom(roomChangeMessage);
+
+                // Remove from current room
+                currentRoom.removeUser(identity);
+
+                // Delete previous room if they are the owner and no one is in it
+                //deleteRoomIfOwner(identity, currentRoom);
+
+                // Put user in the new room
+                currentRoom = room;
+
+                // Record them as now being in the new room
+                currentRoom.getUsers().add(identity);
+                currentRoom.getClientThreads().add(ClientConnection.this);
+            }
+
+
         }
         else{
 
@@ -480,13 +516,17 @@ public class ClientConnection extends Thread {
 
 
 
-    private void storeIdentity(String identity, String listenPort){
-        Server.userIdentities.add(identity+"--listenPort:"+listenPort);
+    private void storeIdentity(String identity, String listenIdentity){
+        Server.userIdentities.add(identity+"--listenPort:"+listenIdentity);
+
+        //建立连接以后直接把此申请连接的peer的监听端口储存在networkList中
+        Server.networkList.add(listenIdentity);
+
         System.out.println("调用storeIdentity方法获得的id是："+identity);
 
         this.identity = identity;
         System.out.println("当前连接线程的id是："+this.identity);
-        this.listenPort = listenPort;
+        this.listenIdentity = listenIdentity;
 
     }
 
