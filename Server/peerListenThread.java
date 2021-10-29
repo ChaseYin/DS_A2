@@ -5,15 +5,13 @@ import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONValue;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
-import java.io.Serializable;
+import java.io.*;
 import java.net.*;
 import java.util.ArrayList;
 import java.util.Scanner;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
-import static Server.Server.networkList;
+import static Server.Server.*;
 import static java.lang.Integer.parseInt;
 //import static jdk.internal.logger.DefaultLoggerFinder.SharedLoggers.system;
 
@@ -22,6 +20,7 @@ public class peerListenThread implements Runnable {
     Socket socket;
     String peerId;//address+监听的端口
     int listenPort;//peer监听的端口
+    int iPort;
     String ip;
     String roomId="";
     String idPort;
@@ -33,11 +32,11 @@ public class peerListenThread implements Runnable {
 
 
 
-    peerListenThread(String ipAddress, int listenPort) {
-
+    peerListenThread(String ipAddress, int listenPort, int iPort) {
+        this.iPort = iPort;
         this.ip = ipAddress;
         this.listenPort = listenPort;
-        this.peerId = ipAddress + listenPort;
+        this.peerId = ipAddress + ":"+listenPort;
 
 
     }
@@ -55,14 +54,15 @@ public class peerListenThread implements Runnable {
             Scanner userInput = new Scanner(System.in);
 
             String message;
-            System.out.println("成功启动本地监听线程");
+            //System.out.println("成功启动本地监听线程");
 
 
             String ipAddress = InetAddress.getLocalHost().toString();
             String[] arr = ipAddress.split("/");
 //            System.out.println("第一个参数是："+arr[0]);
-            System.out.println("当前的ip是："+arr[1]);
 
+            //System.out.println("当前的ip是："+arr[1]);
+            System.out.println("Current ip is："+arr[1]);
             String ip = arr[1];
 
             //System.out.println("address1是："+ip);
@@ -124,13 +124,35 @@ public class peerListenThread implements Runnable {
                             break;
 
 
+                        case "#listneighbors":
+
+                            String listNeighborsRequestMsg = new peerMessage().listNeighborsRequest();
+                            localNeighborRequest();
+//                            outputStream.writeUTF(listNeighborsRequestMsg);
+//                            outputStream.flush();
+                            break;
+
+                        case "#who":
+                            try {
+                                String room = messageTokens[1];
+                                if (room != null) {
+                                    localWhoRequest(room);
+                                }
+                            } catch (Exception e) {
+                                System.out.println("Please provide the name of the room you wish to inspect");
+                            }
+                            break;
+
                         //后续可能需要这个命令列出当前peer已经create的room列表
                         case "#list":
 
                             String listRequestMsg = new peerMessage().listRequest();
                             ArrayList<JSONObject> roomsCount = Server.getRoomListWithCount();
-                            System.out.println("当前peer下的所有room为："+roomsCount);
-                            System.out.println("执行本地#list命令");
+                            //System.out.println("当前peer下的所有room为："+roomsCount);
+
+                            System.out.println("room of this peer is ："+roomsCount);
+
+                            //System.out.println("执行本地#list命令");
 //                            outputStream.writeUTF(listRequestMsg);
 //                            outputStream.flush();
                             break;
@@ -152,9 +174,10 @@ public class peerListenThread implements Runnable {
                             }
                             break;
 
-                        case "#searchNetwork":
+                        case "#searchnetwork":
                             //users里存连接当前peer的peer
                             try {
+                                //应该在最后加一个addNeighbor重新给networkList中加入已连接当前peer下的用户
                                 String[] users = networkList.toArray(new String[networkList.size()]);
 
 
@@ -172,7 +195,7 @@ public class peerListenThread implements Runnable {
                                         //System.out.println("需要连接的ip是"+portArr[0]);
                                         //System.out.println("端口号是"+portArr[1]);
 
-                                        System.out.println("现在有"+size+"个peer需要去search");
+                                        //System.out.println("现在有"+size+"个peer需要去search");
                                         //System.out.println("执行第"+num+"次search");
 
                                         Socket connSocket = null;
@@ -182,8 +205,8 @@ public class peerListenThread implements Runnable {
 
                                         Thread searchThread = new Thread(new searchNetworkThread(connSocket));
                                         searchThread.start();
-                                        System.out.println("当前peer为："+element);
-
+                                        //System.out.println("当前peer为："+element);
+                                        System.out.println("Peer ID："+element);
                                         //这里从3改成了2，因为好像并没有case："quit"的时候
                                         for(int n = 0; n < 2;n++){
                                             String response = ins.readUTF();
@@ -209,18 +232,31 @@ public class peerListenThread implements Runnable {
 //                                                    break;
 
                                                 default:
-                                                    System.out.println("default情况触发");
+                                                    //System.out.println("default情况触发");
+                                                    System.out.println("");
                                                     break;
                                             }
                                         }
                                     }catch(EOFException e){
-                                        System.out.println("当前线程quit完毕");
+                                        //System.out.println("当前线程quit完毕");
+                                        System.out.println("");
                                     }
                                 }
-
+                                //在把networkList清空之后，需要恢复初始状态，也就是包含当前连接的本peer的所有peer
+//                                for(int s = 0; s < neighborList.size(); s++)
+//                                {
+//                                    networkList.add(neighborList.getIndexOf(s));
+//                                }
+                                //System.out.println("networkList的size是："+networkList.size());
+                                //System.out.println("neighborList的size是："+neighborList.size());
+                                //ConcurrentLinkedQueue<String> newList = new ConcurrentLinkedQueue<String>();
+                                //newList = neighborList;
+                                //networkList = newList;
+                                networkList.addAll(neighborList);
 
                             }catch(EOFException e){
-                                    System.out.println("DataInputStream关闭");
+                                    //System.out.println("DataInputStream关闭");
+                                System.out.println("");
                             }
 
                                 break;
@@ -251,32 +287,32 @@ public class peerListenThread implements Runnable {
                                     //要连接的server的监听端口
                                     String connectPort = messageTokens[2];
 
-                                    //-connectionPort后的数字指定peer的connect端口
-                                    //这里需要加一个try-catch结构去触发如果用户输错命令（少输入元素），则提醒用户try again
-
-                                    //peer自己指定的自己的连接端口（可以作为他在聊天室中的id）
-
-                                    //String conPort = messageTokens[4];
-
-
-                                    //System.out.println("the id of this peer is :"+ipAddress+":"+conPort);
-
-                                    //与远端remote peer建立连接，并且监听response
                                     Socket connectSocket = null;
                                     connectSocket = new Socket(connectAddress, parseInt(connectPort));
                                     DataInputStream in = new DataInputStream(connectSocket.getInputStream());
 
                                     int clientPort=connectSocket.getLocalPort();
-                                    System.out.println("当前的peer的连接端口是："+clientPort);
-
-                                    Thread sendingThread = new Thread(new peerSendThread(connectSocket,ip,clientPort,listenPort));
-                                    sendingThread.start();
+                                    //System.out.println("当前的peer的连接端口是："+clientPort);
 
 
-                                    //************把指定端口的功能去掉，把上下文关于指定端口的变量都改成下面的获得的clientPort*****
+                                    if(iPort!=0)
+                                    {
+                                        //System.out.println("用户已经指定该peer的连接端口为"+iPort);
+                                        System.out.println("User has pointed the connection port of the peer as:"+iPort);
+                                        Thread sendingThread = new Thread(new peerSendThread(connectSocket,ip,iPort,listenPort));
+                                        sendingThread.start();
+                                        idPort = iPort+"";
+                                        Server.peerConId = iPort+"";
 
-                                    idPort = clientPort+"";
-                                    Server.peerConId = idPort;
+                                    }else{
+
+                                        //System.out.println("用户没有指定特别的连接端口，连接端口自动生成");
+                                        System.out.println("User does not pointed specific connection port, so generated it automatically");
+                                        Thread sendingThread = new Thread(new peerSendThread(connectSocket,ip,clientPort,listenPort));
+                                        sendingThread.start();
+                                        idPort = clientPort+"";
+                                        Server.peerConId = idPort;
+                                    }
 
                                     Server.connectedTo = connectAddress+":"+connectPort;
 
@@ -304,8 +340,9 @@ public class peerListenThread implements Runnable {
                                                     break;
 
                                                 case "shout":
-                                                    System.out.println("收到shout信息！！");
+                                                    //System.out.println("收到shout信息！！");
                                                     shoutReplay(jsonMsg);
+                                                    Server.shout(jsonMsg.toString());
                                                     break;
 
                                                 case "kickInfo":
@@ -313,55 +350,6 @@ public class peerListenThread implements Runnable {
                                                     kickReplay(jsonMsg);
                                                     break;
 
-                                                case "migrate":
-
-
-                                                    System.out.println("收到migrate请求");
-                                                    String migratePeerIp = jsonMsg.get("migrateIp").toString();
-                                                    String migratePeerPort = jsonMsg.get("migratePort").toString();
-                                                    String migrateRoom = jsonMsg.get("migrateRoom").toString();
-
-                                                    try{
-                                                        System.out.println("Disconnected from " + connectSocket.getInetAddress());
-                                                        in.close();
-                                                        connectSocket.close();
-                                                        //sendingThread.join();
-                                                        sendingThread.interrupt();
-                                                        needToQuit = true;
-                                                        quit = true;
-                                                        //userInput.close();
-
-                                                        //中断与remote peer通信的连接线程
-                                                        //throw new InterruptedException();
-                                                    }catch(IllegalStateException e){
-                                                        System.out.println("成功中断与previous peer的连接");
-
-                                                        System.out.println("userInput关闭");
-                                                    }
-
-                                                    Socket migrateSocket = null;
-                                                    //连接到新的peer
-                                                    migrateSocket = new Socket(migratePeerIp, parseInt(migratePeerPort));
-
-
-                                                    Thread migrateThread = new Thread(new migrateRoomThread(migrateSocket,ip,parseInt(idPort),listenPort,migrateRoom));
-                                                    migrateThread.start();
-                                                    connected = false;
-
-//                                                    Socket migrateSocket = null;
-//                                                    migrateSocket = new Socket(migratePeerIp, parseInt(migratePeerPort));
-//                                                    //DataInputStream in = new DataInputStream(connectSocket.getInputStream());
-//
-//                                                    Thread migrateThread = new Thread(new peerSendThread(migrateSocket,ip,9999,listenPort));
-//                                                    migrateThread.start();
-                                                    //connected = true;
-
-
-                                                    //System.exit(1);
-                                                    //这里又加了一个throw exception
-                                                    throw new InterruptedException();
-                                                    //messageReply(jsonMsg);
-                                                    //break;
 
                                                 case "neighborlist":
                                                     neighborContentsReply(jsonMsg);
@@ -377,11 +365,14 @@ public class peerListenThread implements Runnable {
 
                                                     if (jsonMsg.get("roomid").toString().equals("quit"))
                                                     {
-
+                                                        //Server.neighborList.remove();
+                                                        roomId="";
+                                                        //System.out.println("要退出的id是："+peerId);
+                                                        //userThreads.remove();
                                                             System.out.println("Disconnected from " + connectSocket.getInetAddress()+":"+connectPort);
                                                             in.close();
                                                             connectSocket.close();
-                                                            sendingThread.join();
+                                                            //sendingThread.join();
                                                             connected = false;
                                                         //needToQuit = true;
                                                         //userInput.close();
@@ -395,11 +386,12 @@ public class peerListenThread implements Runnable {
                                                     else {
                                                         if(jsonMsg.get("roomid").toString().equals(""))
                                                         {
-                                                            System.out.println("第一次连接成功建立");
+                                                            //System.out.println("第一次连接成功建立");
+                                                            System.out.println("");
                                                         }else{
                                                             String id = ip+":"+idPort;
                                                             if(jsonMsg.get("identity").toString().equals(id)){
-                                                                System.out.println("比对成功");
+                                                               // System.out.println("比对成功");
                                                                 roomId = jsonMsg.get("roomid").toString();
                                                             }
 
@@ -436,8 +428,8 @@ public class peerListenThread implements Runnable {
                                         //System.out.println("跳出循环！！！！");
 
                                     }catch (EOFException | InterruptedException | SocketException e){
-                                        System.out.println("捕获EOF");
-
+                                        //System.out.println("捕获EOF");
+                                        System.out.println("");
 
                                     }
 
@@ -445,7 +437,7 @@ public class peerListenThread implements Runnable {
                                     //sendingThread.join();
                                 }
                                 else{
-                                    System.out.println("the connect order is not right,please use #connect remotepeer portnumber -cp yourIdPort to connect");
+                                    System.out.println("the connect order is not right,please use #connect remotepeer portnumber to connect");
                                 }
 
 
@@ -525,8 +517,9 @@ public class peerListenThread implements Runnable {
                 }
             }
         } catch (Exception e) {
-            System.out.println("最外层报错！！！！");
-            e.printStackTrace();
+            //System.out.println("最外层报错！！！！");
+            System.out.println("");
+            //e.printStackTrace();
         }
     }
 
@@ -588,7 +581,7 @@ public class peerListenThread implements Runnable {
         System.out.println("#connect remotePeerIp remoteListenPort to connect to other peer");
         System.out.println("#createroom roomName");
         System.out.println("#delete roomName");
-        System.out.println("#searchNetwork");
+        System.out.println("#searchnetwork");
         System.out.println("#kick peerId");
         System.out.println("#join roomName");
         System.out.println("#list");
@@ -630,7 +623,7 @@ public class peerListenThread implements Runnable {
 
             System.out.print(currentRoom + " contains ");
             for (String member : roomMembers) {
-                System.out.print(member + " ");
+                System.out.print(member + "; ");
             }
             System.out.println();
             System.out.print("The owner is: " + jsonMsg.get("owner").toString());
@@ -712,15 +705,53 @@ public class peerListenThread implements Runnable {
 
     private static void roomListReply(JSONObject jsonMsg) {
         JSONArray roomList = (JSONArray) jsonMsg.get("rooms");
-        for (int i = 0; i < roomList.size(); i++) {
-            //print the room id and count of each room
-            JSONObject singleRoom = (JSONObject) roomList.get(i);
-            System.out.print(singleRoom.get("roomid").toString() + ": ");
-            System.out.print(singleRoom.get("count").toString() + " guest/s");
-            System.out.println();
+        if(roomList.size()==0)
+        {
+            System.out.println("This peer does not create any rooms yet");
+        }else{
+            for (int i = 0; i < roomList.size(); i++) {
+                //print the room id and count of each room
+                JSONObject singleRoom = (JSONObject) roomList.get(i);
+                System.out.print(singleRoom.get("roomid").toString() + ": ");
+                System.out.print(singleRoom.get("count").toString() + " guest/s");
+                System.out.println();
 
+            }
+            System.out.println();
         }
+
     }
+
+    private static void localNeighborRequest() {
+        System.out.println("current all peers include:");
+        for(int i = 0; i < userIdentities.size(); i++)
+        {
+            System.out.println(userIdentities.get(i)+"; ");
+        }
+
+
+
+    }
+    private void localWhoRequest(String roomId) throws IOException {
+            ChatRoom roomWho = Server.getRoom(roomId);
+            if (roomWho != null) {
+                String roomOwner = roomWho.getOwner();
+                String[] usersInside = roomWho.getUsers().toArray(new String[Server.getRoom(roomId).getUsers().size()]);
+
+                //String whoResponse = new ServerMessage().roomContentsMsg(roomId, roomOwner, usersInside);
+
+                System.out.print(roomId + " contains ");
+                for (String member : usersInside) {
+                    System.out.print(member + "; ");
+                }
+                System.out.println();
+                System.out.print("The owner is: " + roomOwner);
+                System.out.println();
+            }
+
+    }
+
+
 
 
 

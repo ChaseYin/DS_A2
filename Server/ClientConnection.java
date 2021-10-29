@@ -12,7 +12,9 @@ import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 
+import static Server.Server.*;
 
 
 public class ClientConnection extends Thread {
@@ -64,7 +66,9 @@ public class ClientConnection extends Thread {
         try {
 
             SocketAddress clientPort=socket.getRemoteSocketAddress();
-            System.out.println("连接的peer的连接id是："+clientPort);
+
+            //System.out.println("连接的peer的连接id是："+clientPort);
+
             //get inputStream and outputStream
             DataInputStream in = new DataInputStream(socket.getInputStream());
             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
@@ -91,7 +95,7 @@ public class ClientConnection extends Thread {
             }
         } catch (IOException e) {
             System.out.println("IO exception happened!");
-            e.printStackTrace();
+            //e.printStackTrace();
         }
 
     }
@@ -102,6 +106,7 @@ public class ClientConnection extends Thread {
 
         @Override
         public void run() {
+
 
             boolean readMessages = true;
 
@@ -124,11 +129,17 @@ public class ClientConnection extends Thread {
                             case "message":
                                 jsonMsg.put("identity", identity);
                                 //这里因为刚连接就发送消息会报错
-                                currentRoom.broadcastToRoom(jsonMsg.toString());
+                                if(currentRoom == null)
+                                {
+                                    //System.out.println("当前还没有加入room，不能发送消息");
+                                    System.out.println("This peer has not joined any rooms yet");
+                                }
+                                else{
+                                currentRoom.broadcastToRoom(jsonMsg.toString());}
                                 break;
 
                             case "migrate":
-                                System.out.println("Server端收到migrate请求，现在开始创建room");
+                                //System.out.println("Server端收到migrate请求，现在开始创建room");
                                 String migrateRoom = jsonMsg.get("migrateRoom").toString();
                                 Server.createLocalRoom(migrateRoom+"(migrated)", Server.identity);
                                 clientJoinRequest(migrateRoom+"(migrated)");
@@ -149,14 +160,21 @@ public class ClientConnection extends Thread {
                                     sendUp.start();
                                     //System.out.println("当前peer为："+element);
                                 }catch(NullPointerException e){
-                                    System.out.println("当前peer已经是最顶部peer");
+                                    System.out.println("");
+                                    //System.out.println("当前peer已经是最顶部peer");
                                     //e.printStackTrace();
                                 }
 
+                                //System.out.println("收到shoutMSG");
                                 Server.shout(jsonMsg.toString());
+
+
                                 //currentRoom.broadcastToRoom(jsonMsg.toString());
                                 String shouter = jsonMsg.get("id").toString();
                                 String msg = jsonMsg.get("content").toString();
+
+//                                outputStream.writeUTF(shoutMsg);
+//                                outputStream.flush();
 //                                System.out.println(shouter+" shouted: "+msg);
 
                                 break;
@@ -288,15 +306,18 @@ public class ClientConnection extends Thread {
         try {
             //现在把userIdentities替换成networkList试一下
             //String[] users = Server.userIdentities.toArray(new String[Server.userIdentities.size()]);
-            String[] users = Server.neighborList.toArray(new String[Server.networkList.size()]);
+
+            //把后面修改成了neighborlist，原来是networklist
+            String[] users = neighborList.toArray(new String[neighborList.size()]);
 
             if(users.length==0)
             {
-                System.out.println("现在此peer还没有neighbor");
+                //System.out.println("现在此peer还没有neighbor");
+                System.out.println("This peer does not have neighbors right now");
             }else{
                 //System.out.println("获得的已连接用户是：" + users[0]);
-                String whoMainHallResponse = new ServerMessage().neighborMsg(users);
-                getOutput().writeUTF(whoMainHallResponse);
+                String neighborResponse = new ServerMessage().neighborMsg(users);
+                getOutput().writeUTF(neighborResponse);
                 getOutput().flush();
             }
 
@@ -328,8 +349,8 @@ public class ClientConnection extends Thread {
 
 
     private void removeClientFromPreviousRoom(String roomId, String identity) {
-        System.out.println("现在要处理移除client的room是："+roomId);
-        System.out.println("要移除的client是："+identity);
+        //System.out.println("现在要处理移除client的room是："+roomId);
+        //System.out.println("要移除的client是："+identity);
 
 //        if (roomId != null && !roomId.equals("MainHall")) {
         if (roomId != null) {
@@ -377,44 +398,45 @@ public class ClientConnection extends Thread {
         //这里后面需要加一个判断传来的room是否存在
 
         //要加入的room是MainHall
-        if (roomId.equals("MainHall")) {
+//        if (roomId.equals("MainHall")) {
+//            if (!isAlreadyInRoom(identity, roomId)) {
+//
+//                if (currentRoom != null) {
+//                    //System.out.println("当前所在room是："+currentRoom.getRoomId());
+//                    removeClientFromPreviousRoom(currentRoom.getRoomId(), identity);
+//
+//                }
+//                // Add them to the room
+//                ChatRoom mainHall = Server.rooms.get(0);
+//                currentRoom = mainHall;
+//                currentRoom.getClientThreads().add(ClientConnection.this);        // Add new thread to chatroom(mainHall)
+//
+//                //System.out.println("当前peer的id是："+ClientConnection.this.getIdentity());
+//
+//                currentRoom.getUsers().add(ClientConnection.this.getIdentity()); // Add username to list of mainHall
+//
+////               for(ClientConnection c: currentRoom.getClientThreads())
+////               {
+////                   System.out.println("MainHall中的threads包含："+c.getIdentity());
+////               }
+//
+//                // Send room change message to all in the room
+//                String response = new ServerMessage().roomChangeMsg
+//                        (identity, "", "MainHall");
+//                Server.rooms.get(0).broadcastToRoom(response);
+//
+//                // List the people in Main Hall to the single user
+//                String[] mainHallClients = mainHall.getUsersArray();
+//                String listMessage = new ServerMessage().roomContentsMsg("MainHall", "", mainHallClients);
+//                getOutput().writeUTF(listMessage);
+//                getOutput().flush();
+//            }else{
+//                //System.out.println("当前用户已经在room中了哦");
+//                System.out.println("The user is already in the room");
+//            }
+//
+//        }
 
-            if (!isAlreadyInRoom(identity, roomId)) {
-
-                if (currentRoom != null) {
-                    System.out.println("当前所在room是："+currentRoom.getRoomId());
-                    removeClientFromPreviousRoom(currentRoom.getRoomId(), identity);
-
-                }
-
-                // Add them to the room
-                ChatRoom mainHall = Server.rooms.get(0);
-                currentRoom = mainHall;
-                currentRoom.getClientThreads().add(ClientConnection.this);        // Add new thread to chatroom(mainHall)
-
-                System.out.println("当前peer的id是："+ClientConnection.this.getIdentity());
-
-                currentRoom.getUsers().add(ClientConnection.this.getIdentity()); // Add username to list of mainHall
-
-               for(ClientConnection c: currentRoom.getClientThreads())
-               {
-                   System.out.println("MainHall中的threads包含："+c.getIdentity());
-               }
-
-                // Send room change message to all in the room
-                String response = new ServerMessage().roomChangeMsg
-                        (identity, "", "MainHall");
-                Server.rooms.get(0).broadcastToRoom(response);
-
-                // List the people in Main Hall to the single user
-                String[] mainHallClients = mainHall.getUsersArray();
-                String listMessage = new ServerMessage().roomContentsMsg("MainHall", "", mainHallClients);
-                getOutput().writeUTF(listMessage);
-                getOutput().flush();
-            }else{
-                System.out.println("当前用户已经在room中了哦");
-            }
-        } else {
             //要加入的room不是MainHall
             ChatRoom joinRoom = Server.getRoom(roomId);
 
@@ -434,15 +456,15 @@ public class ClientConnection extends Thread {
 
 
                 currentRoom = joinRoom;
-                System.out.println("要加入的room："+roomId+"存在");
+                //System.out.println("要加入的room："+roomId+"存在");
                 //joinRoom.getClientThreads().add(ClientConnection.this);
                 joinRoom.addClient(ClientConnection.this);
                 joinRoom.getUsers().add(ClientConnection.this.getIdentity());
 
-                for(ClientConnection c: joinRoom.getClientThreads())
-                {
-                    System.out.println("要加入的room中的threads包含："+c.getIdentity());
-                }
+//                for(ClientConnection c: joinRoom.getClientThreads())
+//                {
+//                    System.out.println("要加入的room中的threads包含："+c.getIdentity());
+//                }
 
 
                 //joinRoom.broadcastToRoom(response);
@@ -461,17 +483,18 @@ public class ClientConnection extends Thread {
 
             }else{
                 String MSG = new ServerMessage().roomChangeCheckMsg(roomId,"non-existent");
-                System.out.println("要加入的room："+roomId+"不存在");
+                //System.out.println("要加入的room："+roomId+"不存在");
+                System.out.println("The room："+roomId+"is non-existent");
                 getOutput().writeUTF(MSG);
                 getOutput().flush();
             }
 
 
-            }
+
     }
 
     private void joinRoom(String roomId) throws IOException {
-        System.out.println("进入joinRoom方法");
+        //System.out.println("进入joinRoom方法");
 
         ChatRoom room = Server.getRoom(roomId);
 
@@ -479,7 +502,7 @@ public class ClientConnection extends Thread {
         if (room != null) {
 
             if(currentRoom == null){
-                System.out.println("当前room为空");
+                //System.out.println("当前room为空");
                 // Broadcast changes to rooms
                 String roomChangeMessage = new ServerMessage().roomChangeMsg(identity, "", roomId);
 
@@ -494,10 +517,11 @@ public class ClientConnection extends Thread {
                     currentRoom.getUsers().add(identity);
                     currentRoom.getClientThreads().add(ClientConnection.this);
                 }catch(NullPointerException e){
-                    System.out.println("当前room还没有用户");
+                    //System.out.println("当前room还没有用户");
+                    System.out.println("");
                 }
             }else{
-                System.out.println("当前room不为空");
+                //System.out.println("当前room不为空");
                 // Broadcast changes to rooms
                 String roomChangeMessage = new ServerMessage().roomChangeMsg(identity, currentRoom.getRoomId(), roomId);
 
@@ -523,7 +547,8 @@ public class ClientConnection extends Thread {
         else{
 
             String roomChangeMessage = new ServerMessage().roomChangeMsg(identity, "", roomId);
-            System.out.println("当前room不存在");
+            //System.out.println("当前room不存在");
+            System.out.println("The room is non-existent");
             // Put user in the new room
             currentRoom = room;
 
@@ -538,7 +563,7 @@ public class ClientConnection extends Thread {
     }
 
     public void createRoomRequest(String newRoomId) throws IOException {
-        System.out.println("开始请求创建新room！");
+        //System.out.println("开始请求创建新room！");
 
         boolean roomNameInUse = false;
         for (ChatRoom rm : Server.rooms) {
@@ -562,7 +587,8 @@ public class ClientConnection extends Thread {
             Server.createRoom(newRoomId, identity);
             identityChangeRequest(identity+'*', identity);
 
-            System.out.println("成功创建room:"+newRoomId);
+            //System.out.println("成功创建room:"+newRoomId);
+            System.out.println("Create room:"+newRoomId);
 
             ArrayList<JSONObject> roomsResponse = getRoomListWithCount();
             String roomListResponse = new ServerMessage().roomListMsg(roomsResponse);
@@ -623,24 +649,24 @@ public class ClientConnection extends Thread {
 
 
     private void storeIdentity(String identity, String listenIdentity){
-        Server.userIdentities.add(identity+"--listenPort:"+listenIdentity);
+        Server.userIdentities.add(identity+"--listenId:"+listenIdentity);
 
 
         //Server.identity = identity;
         //Server.listenIdentity = listenIdentity;
 
         //建立连接以后直接把此申请连接的peer的监听端口储存在networkList中
-        Server.networkList.add(listenIdentity);
+        networkList.add(listenIdentity);
 
         Server.shoutList.add(listenIdentity);
 
-        Server.neighborList.add(listenIdentity);
+        neighborList.add(listenIdentity);
 
-        System.out.println("调用storeIdentity方法获得的id是："+identity);
+        //System.out.println("调用storeIdentity方法获得的id是："+identity);
 
         this.identity = identity;
-        System.out.println("当前连接线程的id是："+this.identity);
-
+        //System.out.println("当前连接线程的id是："+this.identity);
+        //System.out.println("当前连接线程的listenIdentity是："+listenIdentity);
         this.listenIdentity = listenIdentity;
 
     }
@@ -715,13 +741,15 @@ public class ClientConnection extends Thread {
                     try {
                         quitRequest();
                     } catch (IOException e) {
-                        System.out.println("被kicked的用户重新连接server，server试图踢出时发生exception");
+                        //System.out.println("被kicked的用户重新连接server，server试图踢出时发生exception");
+                        System.out.println("");
                     }
 
                 }
             }
         }catch(ArrayIndexOutOfBoundsException e){
-            System.out.println("现在黑名单为空");
+            //System.out.println("现在黑名单为空");
+            System.out.println("");
         }
 
     }
@@ -731,29 +759,73 @@ public class ClientConnection extends Thread {
         String kickInfo = new ServerMessage().kickMsg();
         getOutput().writeUTF(kickInfo);
         getOutput().flush();
+        //quitRequest();
     }
 
     public void quitRequest() throws IOException {
 
-//        if (identity.matches("guest\\d{1,3}")) {
-//            String digit = identity.replaceAll("[A-Za-z]", "");
-//            Integer availableId = Integer.parseInt(digit);
-//            Server.makeIdAvailable(availableId);
-//        }
-        // Remove from current room
-        System.out.println("要断连的用户的id是："+identity);
-        //currentRoom.removeUser(identity);
 
-        // Send room change message, new room is an empty string
+        for(ClientConnection connection : userThreads){
+            if(connection.getIdentity().equals(identity))
+            {
+                //System.out.println("找到了要清除的thread");
+                userThreads.remove(userThreads.indexOf(connection));
+            }
+        }
 
-        //当前情况下，如果刚连接到remote peer就quit的话会报错，因为currentroom为null，后面可以改一下
-        //String roomChangeMsg = new ServerMessage().roomChangeMsg(identity, currentRoom.getRoomId(), "");
-        //currentRoom.broadcastToRoom(roomChangeMsg);
+        //userThreads.remove(userThreads.get(0));
+        //System.out.println("要断连的用户的id是："+identity);
 
-        // If they are the owner of any rooms, set the owner to be an empty string
+        if(currentRoom!=null)
+        {
+            currentRoom.removeUser(identity);
+        }
 
-        //删掉所有用户名下的room
-        //removeAnyRoomOwnerships(identity);
+
+        //ConcurrentLinkedQueue<String> newList = new ConcurrentLinkedQueue<String>();
+        //newList.addAll(neighborList);
+        ArrayList<String> updateUser = new ArrayList<String>();
+        ArrayList<String> updateNetwork = new ArrayList<String>();
+
+
+        while(!neighborList.isEmpty()){
+            String element = neighborList.poll();
+
+            if(!element.equals(listenIdentity)) {
+                updateUser.add(element);
+            }
+        }
+        for(int i = 0; i < updateUser.size(); i++)
+        {
+            neighborList.add(updateUser.get(i));
+
+        }
+
+        while(!networkList.isEmpty()){
+            String element = networkList.poll();
+
+            if(!element.equals(listenIdentity)) {
+                updateNetwork.add(element);
+            }
+        }
+        for(int i = 0; i < updateNetwork.size(); i++)
+        {
+            networkList.add(updateNetwork.get(i));
+
+        }
+
+
+        CopyOnWriteArrayList<String> update = new CopyOnWriteArrayList();
+        for(int i = 0; i < userIdentities.size(); i++)
+        {
+
+            if(!userIdentities.get(i).equals(identity+"--listenId:"+listenIdentity))
+            {
+                update.add(userIdentities.get(i));
+            }
+            System.out.println(userIdentities.get(i)+"; ");
+        }
+        userIdentities = update;
 
 
         Server.decreaseGuestCount();

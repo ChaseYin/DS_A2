@@ -26,7 +26,10 @@ public class Server{
 
     //每个peer有一个自己的监听端口 输入"-p xxxx"来决定这个peer在哪个端口监听
     @Option(required = false, name = "-p", aliases = {"--port"}, usage = "port number")
-    private static int port = 3000;
+    private static int port = 4444;
+
+    @Option(required = false, name = "-i", aliases = {"--iport"}, usage = "connectPort number")
+    private static int conport;
 
     @Option(required = false, name = "-h", aliases = {"--host"}, usage = "Host Address")
     private static String host;
@@ -106,7 +109,7 @@ public class Server{
 //            System.out.println("Server is listening on port " + port + "...");
             System.out.println("This peer is currently listening on port " + port + "...");
 
-            Thread listeningThread = new Thread(new peerListenThread(ip,port));
+            Thread listeningThread = new Thread(new peerListenThread(ip,port,conport));
             listeningThread.start();
 
             //DataOutputStream out = listeningThread.getOutput();
@@ -126,7 +129,7 @@ public class Server{
 
                 //SocketAddress clientAddress=socket.getRemoteSocketPort();
                 SocketAddress clientPort=socket.getRemoteSocketAddress();
-                System.out.println("remote socket address是："+clientPort);
+                //System.out.println("remote socket address是："+clientPort);
                 String cc = clientPort + "";
                 String[] res = cc.split(":");
 
@@ -134,7 +137,7 @@ public class Server{
                 String commonId = kickCheck[1];
 
                 peerConId = res[1];
-                System.out.println("peerConId是："+peerConId);
+                //System.out.println("peerConId是："+peerConId);
 
                 int guestId = getNextAvailableId();
 
@@ -193,29 +196,35 @@ public class Server{
     }
 
     public static void addKickUsers(String userId){
-
+        boolean found = false;
         userKicked.add(userId);
         //kickUserThread
         for (ClientConnection connection : userThreads) {
             if(userId.equals(connection.getIdentity()))
             {
                 System.out.println("The user has been found");
+                found = true;
                 try{
                     connection.quitRequest();
                 }catch (IOException e){
-                    System.out.println("踢出用户时捕获exception");
+                    //System.out.println("踢出用户时捕获exception");
+                    System.out.println("");
                 }
 
             }
-            else{
-                System.out.println("The user has been not found");
-            }
+//            else{
+//                System.out.println("The user has been not found");
+//            }
 
         }
+        if(!found){
+            System.out.println("The system cannot found the peer you want to kick");
+        }
+
     }
 
     public static void migrate(String userId, String futureIp, String futurePort, String roomName){
-        System.out.println("调用sever端的migrate（）方法");
+        //System.out.println("调用sever端的migrate（）方法");
         //userKicked.add(userId);
 
         //先发送需要重新connect的peer和重新进入的room
@@ -226,15 +235,15 @@ public class Server{
         for (ClientConnection connection : userThreads) {
             if(userId.equals(connection.getIdentity()))
             {
-                System.out.println("找到了需要migrate的用户");
-                System.out.println("需要migrate的room为："+roomName);
+                //System.out.println("找到了需要migrate的用户");
+                //System.out.println("需要migrate的room为："+roomName);
                 try{
                     //connection.createLocalRoomRequest(roomName,identity);
 
                     connection.migrateRequest(futureIp,futurePort,roomName);
                     //connection.quitRequest();
                 }catch (IOException e){
-                    System.out.println("踢出用户时捕获exception");
+                    System.out.println("");
                 }
 
             }
@@ -273,7 +282,7 @@ public class Server{
 
     public static void shout(String message) throws IOException {
         for (ChatRoom room : rooms) {
-            System.out.println("需要shout的room有："+room.getRoomId());
+            //System.out.println("需要shout的room有："+room.getRoomId());
             room.shoutToRoom(message);
             }
         }
@@ -332,22 +341,35 @@ public class Server{
     public static void deleteRoom(String roomId) {
         ChatRoom roomToBeDeleted = getRoom(roomId);
         if(roomToBeDeleted!=null){
-
             rooms.remove(rooms.indexOf(roomToBeDeleted));
-            try {
-                for (int i = 0; i < roomToBeDeleted.getClientThreads().size(); i++) {
-                    ClientConnection cc = roomToBeDeleted.getClientThreads().get(i);
-                        cc.quitRequest();
+
+            for(ClientConnection c: roomToBeDeleted.getClientThreads())
+            {
+                try {
+                    c.quitRequest();
+                    //System.out.println("要删除的room中的threads包含：" + c.getIdentity());
+                }catch (Exception e){
+                    e.printStackTrace();
                 }
-
-
-            }catch(Exception e){
-                //System.out.println("该room中没有用户");
-                e.printStackTrace();
             }
+
+
+//            try {
+//                System.out.println("要delete的room里有"+roomToBeDeleted.getClientThreads().size()+"个线程");
+//                for (int i = 0; i < roomToBeDeleted.getClientThreads().size(); i++) {
+//                    ClientConnection cc = roomToBeDeleted.getClientThreads().get(i);
+//                        cc.quitRequest();
+//                }
+//
+//
+//            }catch(Exception e){
+//                //System.out.println("该room中没有用户");
+//                e.printStackTrace();
+//            }
         }else{
 
-            System.out.println("并不存在此room");
+//            System.out.println("并不存在此room");
+            System.out.println("The room is non-existent");
         }
 
 
@@ -554,11 +576,13 @@ public class Server{
 
             } else {
 
-                System.out.println("要加入的room为null！");
+                //System.out.println("要加入的room为null！");
+                System.out.println("The room to join is non-existent！");
 
             }
         }catch(NullPointerException e){
-            System.out.println("用户第一次加入room");
+            //System.out.println("用户第一次加入room");
+            System.out.println("");
         }
     }
 
@@ -586,7 +610,8 @@ public class Server{
             }
             else{
                 //System.out.println("请求的room不存在！");
-                        return "请求的room不存在！";
+                        //return "请求的room不存在！";
+                return "The requested room is non-existent！";
             }
         }
     }
