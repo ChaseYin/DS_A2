@@ -65,6 +65,18 @@ public class peerMessage {
         return jsonString;
     }
 
+    public String migrateRequestMsg(String room) {
+        //获得当前room和其中的人数
+        jsonMessage = new JSONObject();
+        jsonMessage.put("type", "migrate");
+        jsonMessage.put("migrateRoom", room);
+
+        String jsonString = jsonMessage.toJSONString() + "\n";
+        return jsonString;
+    }
+
+
+
     public String listNeighborsRequest() {
         //获得当前所有连接remote peer的peer
         jsonMessage = new JSONObject();
@@ -114,5 +126,18 @@ public class peerMessage {
         String jsonString = jsonMessage.toJSONString() + "\n";
         return jsonString;
     }
+
+    public String shoutMessage(String id, String msg) {
+        //chat message
+
+        jsonMessage = new JSONObject();
+        jsonMessage.put("type", "shout");
+        jsonMessage.put("id", id);
+        jsonMessage.put("content", msg);
+
+        String jsonString = jsonMessage.toJSONString() + "\n";
+        return jsonString;
+    }
+
 
 }

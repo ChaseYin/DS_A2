@@ -38,6 +38,38 @@ public class ServerMessage {
         return jsonMessage.toString();
     }
 
+    public String roomChangeCheckMsg(String roomId, String result) {
+        jsonMessage = new JSONObject();
+        jsonMessage.put("type", "roomchangecheck");
+        jsonMessage.put("roomId", roomId);
+        jsonMessage.put("result", result);
+        return jsonMessage.toString();
+    }
+
+    public String kickMsg() {
+        jsonMessage = new JSONObject();
+        jsonMessage.put("type", "kickInfo");
+
+        return jsonMessage.toString();
+    }
+
+    public String migrateMsg(String futureIp, String futurePort, String roomName) {
+        jsonMessage = new JSONObject();
+        jsonMessage.put("type", "migrate");
+        jsonMessage.put("migrateIp", futureIp);
+        jsonMessage.put("migratePort", futurePort);
+        jsonMessage.put("migrateRoom", roomName);
+        return jsonMessage.toString();
+    }
+
+    public String shoutMsg(String msg) {
+        jsonMessage = new JSONObject();
+        jsonMessage.put("type", "shout");
+        jsonMessage.put("success", msg);
+
+        return jsonMessage.toString();
+    }
+
     public String roomContentsMsg(String roomId, String owner, String[] identities) {
         jsonMessage = new JSONObject();
         JSONArray identyList = new JSONArray();

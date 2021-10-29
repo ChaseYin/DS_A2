@@ -1,10 +1,23 @@
 package Server;
 
+
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
+import org.json.simple.JSONValue;
+
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.net.SocketException;
+import java.util.ArrayList;
 import java.util.Scanner;
+
+import static Server.Server.networkList;
+import static Server.Server.shoutList;
+import static java.lang.Integer.parseInt;
 
 public class peerSendThread implements Runnable {
 
@@ -12,13 +25,18 @@ public class peerSendThread implements Runnable {
     String ipAddress;
     int connectPort;
     int listenPort;
+
     String id;
     String currentRoomId;
 
     //该peer所监听的端口
     String listenId;
 
+
     peerSendThread(Socket socket, String ipAddress, int connectPort, int listenPort) {
+
+        //this.id = ipAddress+Server.peerConId;
+
 
         this.socket = socket;
         this.ipAddress = ipAddress;
@@ -40,7 +58,7 @@ public class peerSendThread implements Runnable {
     public void run() {
 
         try {
-
+            Server.peerConId = connectPort+"";
             DataOutputStream outputStream = new DataOutputStream(socket.getOutputStream());
             //get outputStream
 //            DataOutputStream outputStream = new DataOutputStream(socket.getOutputStream());
@@ -103,23 +121,9 @@ public class peerSendThread implements Runnable {
 
                     switch (command) {
 
-                        //不再需要这个case
-//                        case "#identitychange":
-//                            try {
-//                                String newIdentity = messageTokens[1];
-//                                if (newIdentity != null) {
-//                                    if (isValidName(newIdentity)) {
-//                                        String newIdentityMsg = new peerMessage().newIdentityRequest(newIdentity);
-//                                        outputStream.writeUTF(newIdentityMsg);
-//                                        outputStream.flush();
-//                                    } else {
-//                                        System.out.println("Names must be alphanumeric and must not start with a number.");
-//                                    }
-//                                }
-//                            } catch (Exception e) {
-//                                System.out.println("No name provided. Please try again.");
-//                            }
-//                            break;
+                        case "#help":
+                           helpMsg();
+                            break;
 
                         case "#join":
                             try {
@@ -133,6 +137,92 @@ public class peerSendThread implements Runnable {
                                 }
                             } catch (Exception e) {
                                 System.out.println("Please provide the name of the room you would like to join.");
+                            }
+                            break;
+
+                        case "#shout":
+                            try {
+                                String msg = "";
+                                for (int i = 1; i < messageTokens.length; i++) {
+                                    msg = msg + " " + messageTokens[i];
+                                }
+                                //String msg = messageTokens[1];
+                                //System.out.println("需要shout的信息是："+msg);
+                                //System.out.println("需要shout的内容是："+msg);
+                                String shoutMsg = new peerMessage().shoutMessage(id,msg);
+
+                                //把这个注释试图解决输出重复的问题，但没有用
+                                //当前peer下的shout
+                                //Server.shout(shoutMsg);
+
+
+                                //注释这个试图解决输出重复的问题
+                                //先给parent发送shout请求信息，这样子当前peer的neighbor就会收到shout信息
+                                outputStream.writeUTF(shoutMsg);
+                                outputStream.flush();
+
+
+                                System.out.println("shoutList的size："+shoutList.size());
+
+                                //遍历子节点
+                                while(!shoutList.isEmpty()){
+                                    try {
+                                        int size = shoutList.size();
+
+                                        String element = shoutList.poll();
+                                        String[] portArr = element.split(":");
+                                        //System.out.println("需要连接的ip是"+portArr[0]);
+                                        //System.out.println("端口号是"+portArr[1]);
+
+                                        System.out.println("现在有"+size+"个peer需要去shout");
+                                        //System.out.println("执行第"+num+"次search");
+
+                                        Socket shoutSocket = null;
+                                        shoutSocket = new Socket(portArr[0], parseInt(portArr[1]));
+
+                                        DataInputStream ins = new DataInputStream(shoutSocket.getInputStream());
+
+                                        Thread shout = new Thread(new shoutThread(shoutSocket,id,msg));
+                                        shout.start();
+                                        System.out.println("当前peer为："+element);
+
+                                        //这里从3改成了2，因为好像并没有case："quit"的时候
+                                        for(int n = 0; n < 2;n++){
+                                            String response = ins.readUTF();
+
+                                            //utilize json object
+                                            Object obj = JSONValue.parse(response);
+                                            JSONObject jsonMsg = (JSONObject) obj;
+                                            String type = (String) jsonMsg.get("type");
+
+                                            switch (type) {
+                                                case "neighborlist":
+                                                    //neighborContentsReply(jsonMsg);
+                                                    storeShoutPeer(jsonMsg);
+                                                    break;
+
+                                                //说明当前连接的peer都有哪些room
+                                                case "shout":
+                                                   System.out.println("shout完毕");
+                                                    break;
+
+
+                                                default:
+                                                    System.out.println("default情况触发");
+                                                    break;
+                                            }
+                                        }
+                                    }catch(EOFException e){
+                                        System.out.println("当前线程quit完毕");
+                                    }
+                                }
+
+
+
+
+
+                            } catch (Exception e) {
+                                System.out.println("Please provide the message would like to shout.");
                             }
                             break;
 
@@ -154,7 +244,7 @@ public class peerSendThread implements Runnable {
                             String listRequestMsg = new peerMessage().listRequest();
                             outputStream.writeUTF(listRequestMsg);
                             outputStream.flush();
-                            System.out.println("执行远程#list命令");
+                            System.out.println("执行peerSendThread中的远程#list命令");
                             break;
 
                         case "#listneighbors":
@@ -224,7 +314,9 @@ public class peerSendThread implements Runnable {
             }
         } catch (IOException | InterruptedException e) {
             //System.out.println("IO error");
-            e.printStackTrace();
+            //e.printStackTrace();
+            System.out.println("结束该线程");
+
             Thread.currentThread().interrupt();
         }
     }
@@ -257,6 +349,38 @@ public class peerSendThread implements Runnable {
     public DataOutputStream getOutput() throws IOException {
 
         return new DataOutputStream(socket.getOutputStream());
+
+    }
+
+    private static void storeShoutPeer(JSONObject jsonMsg) {
+
+//        String currentRoom = jsonMsg.get("roomid").toString();
+        //get all identities of the room
+        JSONArray jsonRoomMembers = (JSONArray) jsonMsg.get("neighbors");
+
+        ArrayList<String> roomMembers = new ArrayList<>();
+
+        for (int i = 0; i < jsonRoomMembers.size(); i++) {
+            //use msg from server to add user into rooms
+            roomMembers.add(jsonRoomMembers.get(i).toString());
+
+            shoutList.add(jsonRoomMembers.get(i).toString());
+        }
+
+    }
+
+    private static void helpMsg() {
+
+        System.out.println("Following is the examples of remote command :");
+        System.out.println("#join roomName");
+        System.out.println("#who roomName");
+        System.out.println("#shout shoutMsg");
+        System.out.println("#listneighbors");
+        System.out.println("#list");
+        System.out.println("#quit");
+
+        System.out.println();
+
 
     }
 

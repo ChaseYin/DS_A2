@@ -31,11 +31,18 @@ public class Server{
     @Option(required = false, name = "-h", aliases = {"--host"}, usage = "Host Address")
     private static String host;
 
+
+//用来记录此peer连接到的remote peer的ip和监听端口
+    protected static String connectedTo;
+
     //建立一个currentRoom
     protected static ChatRoom currentRoom;
 
     // count connected users
     protected static Integer guestCount = 0;
+
+    //peer连接别人的时候的连接端口(仅仅是连接端口)
+    protected static String peerConId;
 
     protected static PriorityQueue<Integer> nextLowestQueue = new PriorityQueue<>();
 
@@ -45,6 +52,12 @@ public class Server{
     //如果报"不安全的操作，则是这里"
 
     protected static ConcurrentLinkedQueue<String> networkList = new ConcurrentLinkedQueue<String>();
+
+    protected static ConcurrentLinkedQueue<String> shoutList = new ConcurrentLinkedQueue<String>();
+
+    protected static ConcurrentLinkedQueue<String> neighborList = new ConcurrentLinkedQueue<String>();
+
+    protected static ConcurrentLinkedQueue<String> migrateList = new ConcurrentLinkedQueue<String>();
 
     //protected static CopyOnWriteArrayList<String> networkList = new CopyOnWriteArrayList();
 
@@ -56,7 +69,9 @@ public class Server{
 
 
     //private static int connect = 9999;//连接端口
-    private static String identity;
+    public static String identity;
+
+    public static String listenIdentity;
 
 
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -66,12 +81,12 @@ public class Server{
         String ipAddress = getLocalHost().toString();
         //System.out.println("address1是："+ipAddress);
         String[] arr = ipAddress.split("/");
-        System.out.println("第一个参数是："+arr[0]);
-        System.out.println("第二个参数是："+arr[1]);
+//        System.out.println("第一个参数是："+arr[0]);
+//        System.out.println("第二个参数是："+arr[1]);
         String ip = arr[1];
 
         identity = ip+" listen: "+port;
-        System.out.println("当前peer的id为："+ip);
+        //System.out.println("当前peer的id为："+ip);
 
 
 //        String serverIP = getServerIp();
@@ -98,8 +113,8 @@ public class Server{
 
 
             //init the mainHall
-            ChatRoom mainHall = new ChatRoom("MainHall");
-            rooms.add(mainHall);
+//            ChatRoom mainHall = new ChatRoom("MainHall");
+//            rooms.add(mainHall);
 
 
             while (true) {
@@ -108,8 +123,18 @@ public class Server{
                 Socket socket = serverSocket.accept();//accept the requests
                 System.out.println("New peer Connected...");
 
+
+                //SocketAddress clientAddress=socket.getRemoteSocketPort();
                 SocketAddress clientPort=socket.getRemoteSocketAddress();
-                System.out.println("连接的peer的连接id是："+clientPort);
+                System.out.println("remote socket address是："+clientPort);
+                String cc = clientPort + "";
+                String[] res = cc.split(":");
+
+                String[] kickCheck = cc.split("/");
+                String commonId = kickCheck[1];
+
+                peerConId = res[1];
+                System.out.println("peerConId是："+peerConId);
 
                 int guestId = getNextAvailableId();
 
@@ -119,14 +144,23 @@ public class Server{
                 }
 
                 //这个后面需要改成IP+port
-                String newGuest = "guest" + guestId;
+                //String newGuest = "guest" + guestId;
 
                 //userIdentities.add(newGuest);
 
-                ClientConnection client = new ClientConnection(socket, newGuest);
+                if(!userKicked.contains(commonId))
+                {
+                    ClientConnection client = new ClientConnection(socket, cc);
 
-                userThreads.add(client);
-                client.start();
+                    userThreads.add(client);
+                    client.start();
+                }else{
+                    ClientConnection clientKick = new ClientConnection(socket, cc);
+                    clientKick.kickNotice();
+                    clientKick.quitRequest();
+                }
+
+
                 //建立连接peer的connection
             }
         } catch (SocketException e) {
@@ -180,6 +214,43 @@ public class Server{
         }
     }
 
+    public static void migrate(String userId, String futureIp, String futurePort, String roomName){
+        System.out.println("调用sever端的migrate（）方法");
+        //userKicked.add(userId);
+
+        //先发送需要重新connect的peer和重新进入的room
+        //connection.migrateRequest（migratePeer,roomName）
+        //让peerListenThread那边先把要加入的peer和room记录下来
+        //然后再退出
+
+        for (ClientConnection connection : userThreads) {
+            if(userId.equals(connection.getIdentity()))
+            {
+                System.out.println("找到了需要migrate的用户");
+                System.out.println("需要migrate的room为："+roomName);
+                try{
+                    //connection.createLocalRoomRequest(roomName,identity);
+
+                    connection.migrateRequest(futureIp,futurePort,roomName);
+                    //connection.quitRequest();
+                }catch (IOException e){
+                    System.out.println("踢出用户时捕获exception");
+                }
+
+            }
+            else{
+                System.out.println("找不到需要migrate的用户");
+            }
+            System.out.println("现在从server结束掉connection");
+            connection.interrupt();
+
+
+        }
+
+
+    }
+
+
 
 
     private static void closeAllThreads() throws InterruptedException {
@@ -197,7 +268,18 @@ public class Server{
             Thread messageSender = new Thread(new ServerSendThread(out, message));
             messageSender.start();
         }
+
     }
+
+    public static void shout(String message) throws IOException {
+        for (ChatRoom room : rooms) {
+            System.out.println("需要shout的room有："+room.getRoomId());
+            room.shoutToRoom(message);
+            }
+        }
+
+
+
 
     public static ChatRoom getRoom(String roomId) {
         for (ChatRoom room : rooms) {
@@ -217,8 +299,6 @@ public class Server{
             newRoom.setOwner(owner);
             rooms.add(newRoom);
             System.out.println("The room called: "+roomId+" has been successfully created");
-
-
         }
     }
     public static void createLocalRoom(String newRoomId, String owner) throws IOException {
@@ -250,9 +330,29 @@ public class Server{
     }
 
     public static void deleteRoom(String roomId) {
-
         ChatRoom roomToBeDeleted = getRoom(roomId);
-        rooms.remove(rooms.indexOf(roomToBeDeleted));
+        if(roomToBeDeleted!=null){
+
+            rooms.remove(rooms.indexOf(roomToBeDeleted));
+            try {
+                for (int i = 0; i < roomToBeDeleted.getClientThreads().size(); i++) {
+                    ClientConnection cc = roomToBeDeleted.getClientThreads().get(i);
+                        cc.quitRequest();
+                }
+
+
+            }catch(Exception e){
+                //System.out.println("该room中没有用户");
+                e.printStackTrace();
+            }
+        }else{
+
+            System.out.println("并不存在此room");
+        }
+
+
+
+
         //Firstly create a copy, process the operation in this new copy and then re-direct
         //the original address to this one
     }
@@ -415,7 +515,7 @@ public class Server{
 
     public static void localJoinRoom(String roomId) throws IOException {
 
-        System.out.println("我叫："+identity);
+        System.out.println(identity+ " has joined "+roomId);
         //ChatRoom MainHall = Server.rooms.get(0);
         //currentRoom = MainHall;
 
@@ -459,6 +559,35 @@ public class Server{
             }
         }catch(NullPointerException e){
             System.out.println("用户第一次加入room");
+        }
+    }
+
+
+    public static String getRoomMem(String roomId) throws IOException {
+        if (roomId.equals("MainHall")) {
+
+            String[] users = Server.rooms.get(0).getUsers().toArray(new String[Server.rooms.get(0).getUsers().size()]);
+
+            String whoMainHallResponse = new ServerMessage().roomContentsMsg("MainHall", "", users);
+            return whoMainHallResponse;
+//            getOutput().writeUTF(whoMainHallResponse);
+//            getOutput().flush();
+
+        } else {
+            ChatRoom roomWho = Server.getRoom(roomId);
+            if (roomWho != null) {
+                String roomOwner = roomWho.getOwner();
+                String[] usersInside = roomWho.getUsers().toArray(new String[Server.getRoom(roomId).getUsers().size()]);
+
+                String whoResponse = new ServerMessage().roomContentsMsg(roomId, roomOwner, usersInside);
+                return whoResponse;
+//                getOutput().writeUTF(whoResponse);
+//                getOutput().flush();
+            }
+            else{
+                //System.out.println("请求的room不存在！");
+                        return "请求的room不存在！";
+            }
         }
     }
 

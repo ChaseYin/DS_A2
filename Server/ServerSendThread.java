@@ -19,7 +19,7 @@ public class ServerSendThread implements Runnable {
 
         try {
             //这里的message不能改变
-            System.out.print("这里是serverSendThread");
+            //System.out.print("这里是serverSendThread");
             out.writeUTF(message);
             out.flush();
         } catch (IOException e) {
